@@ -1,6 +1,6 @@
-import { eq, and } from 'drizzle-orm';
+import { eq, and, ne } from 'drizzle-orm';
 import { db } from '../../db';
-import { reports, matches, notifications } from '../../db/schema';
+import { reports, matches } from '../../db/schema';
 import { getReportById } from '../../repositories/reports';
 
 // Configurable weights
@@ -42,27 +42,25 @@ function calculateDateScore(date1: string, date2: string): number {
 }
 
 function calculateLocationScore(loc1: string, loc2: string): number {
-  // Simplified matching for location
   const l1 = loc1.toLowerCase();
   const l2 = loc2.toLowerCase();
   if (l1 === l2) return 100;
   if (l1.includes(l2) || l2.includes(l1)) return 80;
-  
-  return calculateKeywordScore(l1, l2); // fallback to keyword similarity
+  return calculateKeywordScore(l1, l2);
 }
 
 export async function triggerMatching(reportId: string) {
   try {
     const report = await getReportById(reportId);
-    if (!report || report.status !== 'ACTIVE') return;
+    if (!report || report.status === 'CLOSED' || report.status === 'RETURNED') return;
 
     const targetType = report.reportType === 'LOST' ? 'FOUND' : 'LOST';
 
-    // Find active opposite reports
+    // Find opposite reports that are open
     const candidates = await db
       .select()
       .from(reports)
-      .where(and(eq(reports.reportType, targetType), eq(reports.status, 'ACTIVE')));
+      .where(and(eq(reports.reportType, targetType), ne(reports.status, 'CLOSED'), ne(reports.status, 'RETURNED')));
 
     for (const candidate of candidates) {
       let score = 0;
@@ -79,7 +77,11 @@ export async function triggerMatching(reportId: string) {
       score += (kwScore / 100) * WEIGHTS.KEYWORDS;
 
       // Location match
-      const locScore = calculateLocationScore(report.location, candidate.location);
+      let locScore = calculateLocationScore(report.location, candidate.location);
+      if (report.specificLocation && candidate.specificLocation) {
+        const specScore = calculateKeywordScore(report.specificLocation, candidate.specificLocation);
+        locScore = Math.max(locScore, specScore);
+      }
       score += (locScore / 100) * WEIGHTS.LOCATION;
 
       // Date match
@@ -87,7 +89,6 @@ export async function triggerMatching(reportId: string) {
       score += (dateScore / 100) * WEIGHTS.DATE;
 
       if (score >= MATCH_THRESHOLD) {
-        // Create match record
         const lostReportId = report.reportType === 'LOST' ? report.id : candidate.id;
         const foundReportId = report.reportType === 'FOUND' ? report.id : candidate.id;
 
@@ -99,30 +100,20 @@ export async function triggerMatching(reportId: string) {
           .limit(1);
 
         if (existing.length === 0) {
-          const [newMatch] = await db.insert(matches).values({
+          await db.insert(matches).values({
             lostReportId,
             foundReportId,
             score: Math.round(score),
             status: 'PENDING'
-          }).returning();
+          });
 
-          // Notify both parties
-          await db.insert(notifications).values([
-            {
-              userId: report.userId,
-              type: 'POTENTIAL_MATCH',
-              message: `A potential match was found for your ${report.reportType.toLowerCase()} item: ${report.title}`,
-              relatedMatchId: newMatch.id,
-              relatedReportId: report.id,
-            },
-            {
-              userId: candidate.userId,
-              type: 'POTENTIAL_MATCH',
-              message: `A potential match was found for your ${candidate.reportType.toLowerCase()} item: ${candidate.title}`,
-              relatedMatchId: newMatch.id,
-              relatedReportId: candidate.id,
-            }
-          ]);
+          // Mark both reports as MATCHED if they were in SUBMITTED or UNDER_REVIEW
+          if (report.status === 'SUBMITTED' || report.status === 'UNDER_REVIEW') {
+            await db.update(reports).set({ status: 'MATCHED' }).where(eq(reports.id, report.id));
+          }
+          if (candidate.status === 'SUBMITTED' || candidate.status === 'UNDER_REVIEW') {
+            await db.update(reports).set({ status: 'MATCHED' }).where(eq(reports.id, candidate.id));
+          }
         }
       }
     }

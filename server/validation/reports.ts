@@ -6,6 +6,7 @@ export const createReportSchema = z.object({
   description: z.string().min(10, 'Description is too short'),
   category: z.string().min(2, 'Category is required'),
   location: z.string().min(2, 'Location is required'),
+  specificLocation: z.string().optional().nullable(),
   eventDate: z.string().refine((val) => !isNaN(Date.parse(val)), 'Invalid date'),
   eventTime: z.string().optional().nullable(),
   contactInfo: z.string().optional().nullable(),

@@ -1,8 +1,9 @@
-import { neon } from '@neondatabase/serverless';
-import { drizzle } from 'drizzle-orm/neon-http';
+import postgres from 'postgres';
+import { drizzle } from 'drizzle-orm/postgres-js';
 import * as schema from './schema';
 
-// This is required to make sure we do not fail in environments without DB, like initial build
 const connectionString = process.env.DATABASE_URL || 'postgres://user:pass@localhost:5432/db';
-const sql = neon(connectionString);
-export const db = drizzle({ client: sql, schema });
+
+// Disable prepared statements for Supabase transaction pooler (port 6543)
+const client = postgres(connectionString, { prepare: false });
+export const db = drizzle(client, { schema });

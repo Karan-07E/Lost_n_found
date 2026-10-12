@@ -1,46 +1,132 @@
-import { NextResponse } from 'next/server';
-import { requireAuth } from '../../../server/auth/session';
-import { createReportService } from '../../../server/services/reports/createReport';
-import { getReportsByType } from '../../../server/repositories/reports';
+import { NextRequest } from 'next/server';
+import { db } from '@/server/db';
+import { reports } from '@/server/db/schema';
+import { eq, desc, ilike, and, or } from 'drizzle-orm';
+import { generateReportId } from '@/server/utils/helpers';
+import { triggerMatching } from '@/server/services/matching/engine';
+import { z } from 'zod';
 
-export async function POST(req: Request) {
+const ReportSchema = z.object({
+  reportType: z.enum(['LOST', 'FOUND']),
+  title: z.string().min(2),
+  description: z.string().min(10),
+  category: z.string().min(1),
+  location: z.string().min(1),
+  specificLocation: z.string().optional().nullable(),
+  eventDate: z.string().min(1).refine((val) => {
+    const d = new Date(val);
+    if (isNaN(d.getTime())) return false;
+    const now = new Date();
+    const max = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 23, 59, 59);
+    const min = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 31, 0, 0, 0);
+    return d <= max && d >= min;
+  }, 'Date must be within the past 30 days and cannot be in the future'),
+  eventTime: z.string().optional(),
+  identifyingFeatures: z.string().optional().nullable(),
+  imagePath: z.string().optional(),
+  additionalDetails: z.string().optional(),
+  reporterName: z.string().min(2),
+  reporterUsn: z.string().optional(),
+  reporterDept: z.string().optional(),
+  reporterSemester: z.string().optional(),
+  reporterContact: z.string().min(5),
+  reporterEmail: z.string().email().optional().or(z.literal('')),
+});
+
+export async function GET(request: NextRequest) {
   try {
-    const session = await requireAuth();
-    const formData = await req.formData();
-    
-    const report = await createReportService(formData, session.userId);
-    
-    return NextResponse.json({
-      success: true,
-      data: report,
-      message: 'Report created successfully'
-    });
+    const { searchParams } = request.nextUrl;
+    const type = searchParams.get('type'); // LOST | FOUND | null (all)
+    const category = searchParams.get('category');
+    const location = searchParams.get('location');
+    const query = searchParams.get('q');
+    const limit = Math.min(parseInt(searchParams.get('limit') || '20'), 50);
+    const offset = parseInt(searchParams.get('offset') || '0');
+
+    const conditions = [];
+    if (type === 'LOST' || type === 'FOUND') {
+      conditions.push(eq(reports.reportType, type));
+    }
+    if (category) conditions.push(ilike(reports.category, `%${category}%`));
+    if (location) conditions.push(ilike(reports.location, `%${location}%`));
+    if (query) {
+      conditions.push(
+        or(
+          ilike(reports.title, `%${query}%`),
+          ilike(reports.description, `%${query}%`),
+          ilike(reports.location, `%${query}%`),
+          ilike(reports.specificLocation, `%${query}%`),
+          ilike(reports.category, `%${query}%`)
+        )
+      );
+    }
+
+    const rows = await db
+      .select({
+        id: reports.id,
+        reportId: reports.reportId,
+        reportType: reports.reportType,
+        title: reports.title,
+        description: reports.description,
+        category: reports.category,
+        location: reports.location,
+        specificLocation: reports.specificLocation,
+        eventDate: reports.eventDate,
+        imagePath: reports.imagePath,
+        status: reports.status,
+        createdAt: reports.createdAt,
+      })
+      .from(reports)
+      .where(conditions.length ? and(...conditions) : undefined)
+      .orderBy(desc(reports.createdAt))
+      .limit(limit)
+      .offset(offset);
+
+    return Response.json({ data: rows });
   } catch (err) {
-    const error = err as Error;
-    return NextResponse.json(
-      { success: false, error: { code: 'BAD_REQUEST', message: error.message } },
-      { status: error.message === 'UNAUTHORIZED' ? 401 : 400 }
-    );
+    console.error(err);
+    return Response.json({ error: 'Failed to fetch reports' }, { status: 500 });
   }
 }
 
-export async function GET(req: Request) {
+export async function POST(request: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url);
-    const type = searchParams.get('type') as 'LOST' | 'FOUND' | null;
-    const page = parseInt(searchParams.get('page') || '1');
-    
-    if (!type || !['LOST', 'FOUND'].includes(type)) {
-      return NextResponse.json({ success: false, error: { code: 'BAD_REQUEST', message: 'Valid type is required' } }, { status: 400 });
+    const body = await request.json();
+    const parsed = ReportSchema.safeParse(body);
+    if (!parsed.success) {
+      return Response.json({ error: 'Validation failed', details: parsed.error.flatten() }, { status: 400 });
     }
+    const data = parsed.data;
+    const reportId = await generateReportId();
 
-    const reports = await getReportsByType(type, page);
-    return NextResponse.json({ success: true, data: reports });
+    const [row] = await db.insert(reports).values({
+      reportId,
+      reportType: data.reportType,
+      title: data.title,
+      description: data.description,
+      category: data.category,
+      location: data.location,
+      specificLocation: data.specificLocation || null,
+      eventDate: data.eventDate,
+      eventTime: data.eventTime || null,
+      identifyingFeatures: data.identifyingFeatures || null,
+      imagePath: data.imagePath || null,
+      additionalDetails: data.additionalDetails || null,
+      reporterName: data.reporterName,
+      reporterUsn: data.reporterUsn || null,
+      reporterDept: data.reporterDept || null,
+      reporterSemester: data.reporterSemester || null,
+      reporterContact: data.reporterContact,
+      reporterEmail: data.reporterEmail || null,
+      status: 'SUBMITTED',
+    }).returning();
+
+    // Trigger heuristic matching in background
+    triggerMatching(row.id).catch(console.error);
+
+    return Response.json({ data: { reportId: row.reportId, id: row.id } }, { status: 201 });
   } catch (err) {
-    const error = err as Error;
-    return NextResponse.json(
-      { success: false, error: { code: 'INTERNAL_ERROR', message: 'Failed to fetch reports' } },
-      { status: 500 }
-    );
+    console.error(err);
+    return Response.json({ error: 'Failed to create report' }, { status: 500 });
   }
 }

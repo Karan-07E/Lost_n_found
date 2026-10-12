@@ -1,56 +1,75 @@
-import { NextResponse } from 'next/server';
-import { getReportById, updateReportStatus, deleteReport } from '../../../../server/repositories/reports';
-import { requireAuth } from '../../../../server/auth/session';
+import { NextRequest } from 'next/server';
+import { db } from '@/server/db';
+import { reports } from '@/server/db/schema';
+import { eq, or } from 'drizzle-orm';
 
-export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
+type Params = { params: Promise<{ id: string }> };
+
+export async function GET(_req: NextRequest, { params }: Params) {
   try {
     const { id } = await params;
-    const report = await getReportById(id);
-    if (!report) {
-      return NextResponse.json({ success: false, error: { code: 'NOT_FOUND', message: 'Report not found' } }, { status: 404 });
+    // Support lookup by UUID or by reportId (e.g. LF-2026-00124)
+    const [row] = await db
+      .select()
+      .from(reports)
+      .where(or(eq(reports.id, id), eq(reports.reportId, id)))
+      .limit(1);
+
+    if (!row) {
+      return Response.json({ error: 'Report not found' }, { status: 404 });
     }
-    return NextResponse.json({ success: true, data: report });
+
+    // Omit sensitive private info for public view
+    const publicRow = {
+      id: row.id,
+      reportId: row.reportId,
+      reportType: row.reportType,
+      title: row.title,
+      description: row.description,
+      category: row.category,
+      location: row.location,
+      specificLocation: row.specificLocation,
+      eventDate: row.eventDate,
+      eventTime: row.eventTime,
+      imagePath: row.imagePath,
+      status: row.status,
+      createdAt: row.createdAt,
+      // Note: identifying features are NOT returned publicly to prevent fraudulent claims
+    };
+
+    return Response.json({ data: publicRow });
   } catch (err) {
-    const error = err as Error;
-    return NextResponse.json({ success: false, error: { code: 'INTERNAL_ERROR', message: 'Failed to fetch report' } }, { status: 500 });
+    console.error(err);
+    return Response.json({ error: 'Failed to fetch report' }, { status: 500 });
   }
 }
 
-export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function PATCH(req: NextRequest, { params }: Params) {
   try {
     const { id } = await params;
-    const session = await requireAuth();
+    // Admin-only: update status, add notes
+    const adminPassword = req.headers.get('x-admin-password');
+    if (adminPassword !== process.env.ADMIN_PASSWORD) {
+      return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const body = await req.json();
-    
-    // Admins have their own route for overriding status, this is for standard users.
-    const updated = await updateReportStatus(id, body.status, session.userId);
-    if (!updated) {
-      return NextResponse.json({ success: false, error: { code: 'NOT_FOUND_OR_FORBIDDEN', message: 'Cannot update report' } }, { status: 403 });
+    const allowed = ['status', 'adminNotes'] as const;
+    const updateData: Record<string, string> = {};
+    for (const key of allowed) {
+      if (body[key] !== undefined) updateData[key] = body[key];
     }
-    return NextResponse.json({ success: true, data: updated });
-  } catch (err) {
-    const error = err as Error;
-    return NextResponse.json(
-      { success: false, error: { code: 'BAD_REQUEST', message: error.message } },
-      { status: error.message === 'UNAUTHORIZED' ? 401 : 400 }
-    );
-  }
-}
 
-export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  try {
-    const { id } = await params;
-    const session = await requireAuth();
-    const deleted = await deleteReport(id, session.userId);
-    if (!deleted) {
-      return NextResponse.json({ success: false, error: { code: 'NOT_FOUND_OR_FORBIDDEN', message: 'Cannot delete report' } }, { status: 403 });
-    }
-    return NextResponse.json({ success: true, message: 'Report deleted' });
+    const [updated] = await db
+      .update(reports)
+      .set({ ...updateData, updatedAt: new Date() })
+      .where(eq(reports.id, id))
+      .returning({ reportId: reports.reportId, status: reports.status });
+
+    if (!updated) return Response.json({ error: 'Report not found' }, { status: 404 });
+    return Response.json({ data: updated });
   } catch (err) {
-    const error = err as Error;
-    return NextResponse.json(
-      { success: false, error: { code: 'BAD_REQUEST', message: error.message } },
-      { status: error.message === 'UNAUTHORIZED' ? 401 : 400 }
-    );
+    console.error(err);
+    return Response.json({ error: 'Failed to update report' }, { status: 500 });
   }
 }

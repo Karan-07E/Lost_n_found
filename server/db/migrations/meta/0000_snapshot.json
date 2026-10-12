@@ -1,77 +1,9 @@
 {
-  "id": "4664e963-dcd7-475d-9a41-5b72da95492d",
+  "id": "211d0494-d080-4fc4-8804-61da173a9a05",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
-    "public.users": {
-      "name": "users",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "email": {
-          "name": "email",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "password_hash": {
-          "name": "password_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "role": {
-          "name": "role",
-          "type": "user_role",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'STUDENT'"
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "users_email_unique": {
-          "name": "users_email_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "email"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.reports": {
       "name": "reports",
       "schema": "",
@@ -82,6 +14,12 @@
           "primaryKey": true,
           "notNull": true,
           "default": "gen_random_uuid()"
+        },
+        "report_id": {
+          "name": "report_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
         },
         "report_type": {
           "name": "report_type",
@@ -126,8 +64,8 @@
           "primaryKey": false,
           "notNull": false
         },
-        "contact_info": {
-          "name": "contact_info",
+        "identifying_features": {
+          "name": "identifying_features",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -144,19 +82,55 @@
           "primaryKey": false,
           "notNull": false
         },
+        "reporter_name": {
+          "name": "reporter_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reporter_usn": {
+          "name": "reporter_usn",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reporter_dept": {
+          "name": "reporter_dept",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reporter_semester": {
+          "name": "reporter_semester",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reporter_contact": {
+          "name": "reporter_contact",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reporter_email": {
+          "name": "reporter_email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "status": {
           "name": "status",
           "type": "report_status",
           "typeSchema": "public",
           "primaryKey": false,
           "notNull": true,
-          "default": "'ACTIVE'"
+          "default": "'SUBMITTED'"
         },
-        "user_id": {
-          "name": "user_id",
-          "type": "uuid",
+        "admin_notes": {
+          "name": "admin_notes",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "created_at": {
           "name": "created_at",
@@ -174,23 +148,17 @@
         }
       },
       "indexes": {},
-      "foreignKeys": {
-        "reports_user_id_users_id_fk": {
-          "name": "reports_user_id_users_id_fk",
-          "tableFrom": "reports",
-          "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "reports_report_id_unique": {
+          "name": "reports_report_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "report_id"
+          ]
         }
       },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -293,26 +261,62 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
+        "claim_id": {
+          "name": "claim_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
         "found_report_id": {
           "name": "found_report_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
-        "claimant_id": {
-          "name": "claimant_id",
+        "lost_report_id": {
+          "name": "lost_report_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
-        "justification": {
-          "name": "justification",
+        "claimant_name": {
+          "name": "claimant_name",
           "type": "text",
           "primaryKey": false,
           "notNull": true
         },
-        "proof_image_path": {
-          "name": "proof_image_path",
+        "claimant_usn": {
+          "name": "claimant_usn",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "claimant_dept": {
+          "name": "claimant_dept",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "claimant_contact": {
+          "name": "claimant_contact",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "claimant_email": {
+          "name": "claimant_email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ownership_evidence": {
+          "name": "ownership_evidence",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "additional_info": {
+          "name": "additional_info",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -325,9 +329,9 @@
           "notNull": true,
           "default": "'PENDING'"
         },
-        "reviewed_by": {
-          "name": "reviewed_by",
-          "type": "uuid",
+        "admin_notes": {
+          "name": "admin_notes",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },
@@ -367,25 +371,12 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "claims_claimant_id_users_id_fk": {
-          "name": "claims_claimant_id_users_id_fk",
+        "claims_lost_report_id_reports_id_fk": {
+          "name": "claims_lost_report_id_reports_id_fk",
           "tableFrom": "claims",
-          "tableTo": "users",
+          "tableTo": "reports",
           "columnsFrom": [
-            "claimant_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "claims_reviewed_by_users_id_fk": {
-          "name": "claims_reviewed_by_users_id_fk",
-          "tableFrom": "claims",
-          "tableTo": "users",
-          "columnsFrom": [
-            "reviewed_by"
+            "lost_report_id"
           ],
           "columnsTo": [
             "id"
@@ -395,114 +386,30 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.notifications": {
-      "name": "notifications",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "type": {
-          "name": "type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "message": {
-          "name": "message",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "related_report_id": {
-          "name": "related_report_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "related_claim_id": {
-          "name": "related_claim_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "related_match_id": {
-          "name": "related_match_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "read": {
-          "name": "read",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
+      "uniqueConstraints": {
+        "claims_claim_id_unique": {
+          "name": "claims_claim_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "claim_id"
+          ]
         }
       },
-      "indexes": {},
-      "foreignKeys": {
-        "notifications_user_id_users_id_fk": {
-          "name": "notifications_user_id_users_id_fk",
-          "tableFrom": "notifications",
-          "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
     }
   },
   "enums": {
-    "public.user_role": {
-      "name": "user_role",
-      "schema": "public",
-      "values": [
-        "STUDENT",
-        "TEACHER",
-        "ADMIN"
-      ]
-    },
     "public.report_status": {
       "name": "report_status",
       "schema": "public",
       "values": [
-        "ACTIVE",
+        "SUBMITTED",
+        "UNDER_REVIEW",
         "MATCHED",
-        "CLAIMED",
-        "RECOVERED",
+        "VERIFICATION",
+        "RETURNED",
         "CLOSED"
       ]
     },
@@ -529,7 +436,8 @@
       "values": [
         "PENDING",
         "APPROVED",
-        "REJECTED"
+        "REJECTED",
+        "MORE_INFO_NEEDED"
       ]
     }
   },
