@@ -1,33 +1,38 @@
-import { createReportSchema } from '../../validation/reports';
 import { createReport as createReportRepo } from '../../repositories/reports';
 import { uploadImage } from '../../utils/upload';
 import { triggerMatching } from '../matching/engine';
 
-export async function createReportService(formData: FormData, userId: string) {
-  const rawData: Record<string, any> = {};
-  
-  for (const [key, value] of formData.entries()) {
-    if (key !== 'image') {
-      rawData[key] = value;
-    }
-  }
+export async function createReportService(formData: FormData) {
+  const title = (formData.get('title') as string) || '';
+  const description = (formData.get('description') as string) || '';
+  const category = (formData.get('category') as string) || '';
+  const location = (formData.get('location') as string) || '';
+  const eventDate = (formData.get('eventDate') as string) || '';
+  const reporterName = (formData.get('reporterName') as string) || '';
+  const reporterContact = (formData.get('reporterContact') as string) || '';
+  const reportType = (formData.get('reportType') as 'LOST' | 'FOUND') || 'LOST';
 
-  const validated = createReportSchema.parse(rawData);
-  
-  let imagePath = null;
+  let imagePath: string | null = null;
   const imageFile = formData.get('image') as File | null;
   if (imageFile && imageFile.size > 0) {
     imagePath = await uploadImage(imageFile);
   }
 
   const newReport = await createReportRepo({
-    ...validated,
+    reportId: `LF-${Date.now().toString().slice(-6)}`,
+    reportType,
+    title,
+    description,
+    category,
+    location,
+    eventDate,
+    reporterName,
+    reporterContact,
     imagePath,
-    userId,
-    status: 'ACTIVE',
+    status: 'SUBMITTED',
   });
 
-  // Run matching engine asynchronously (fire and forget)
+  // Run matching engine asynchronously
   triggerMatching(newReport.id).catch(console.error);
 
   return newReport;

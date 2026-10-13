@@ -7,7 +7,7 @@ export const matches = pgTable('matches', {
   id: uuid('id').defaultRandom().primaryKey(),
   lostReportId: uuid('lost_report_id').references(() => reports.id, { onDelete: 'cascade' }).notNull(),
   foundReportId: uuid('found_report_id').references(() => reports.id, { onDelete: 'cascade' }).notNull(),
-  score: integer('score').notNull(),
+  score: integer('score').notNull(), // 0-100 match confidence
   status: matchStatusEnum('status').default('PENDING').notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),

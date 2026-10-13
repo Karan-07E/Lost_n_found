@@ -1,9 +1,10 @@
-import { eq, desc, and } from 'drizzle-orm';
+import { eq, desc } from 'drizzle-orm';
 import { db } from '../db';
 import { claims, reports } from '../db/schema';
 
 export type ClaimInsert = typeof claims.$inferInsert;
 export type ClaimSelect = typeof claims.$inferSelect;
+export type ClaimStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'MORE_INFO_NEEDED';
 
 export async function createClaim(data: ClaimInsert): Promise<ClaimSelect> {
   const result = await db.insert(claims).values(data).returning();
@@ -15,27 +16,23 @@ export async function getClaimById(id: string): Promise<ClaimSelect | null> {
   return result[0] || null;
 }
 
-export async function getUserClaims(userId: string): Promise<any[]> {
-  const result = await db
-    .select({
-      id: claims.id,
-      status: claims.status,
-      createdAt: claims.createdAt,
-      reportTitle: reports.title,
-      reportId: reports.id,
-    })
+export async function getClaimsByReportId(foundReportId: string): Promise<ClaimSelect[]> {
+  return await db
+    .select()
     .from(claims)
-    .innerJoin(reports, eq(claims.foundReportId, reports.id))
-    .where(eq(claims.claimantId, userId))
+    .where(eq(claims.foundReportId, foundReportId))
     .orderBy(desc(claims.createdAt));
-    
-  return result;
 }
 
-export async function updateClaimStatus(id: string, status: 'APPROVED' | 'REJECTED', adminId: string): Promise<ClaimSelect | null> {
+export async function updateClaimStatus(id: string, status: ClaimStatus, adminNotes?: string): Promise<ClaimSelect | null> {
   const result = await db
     .update(claims)
-    .set({ status, reviewedBy: adminId, reviewedAt: new Date(), updatedAt: new Date() })
+    .set({
+      status,
+      adminNotes: adminNotes || null,
+      reviewedAt: new Date(),
+      updatedAt: new Date(),
+    })
     .where(eq(claims.id, id))
     .returning();
     
