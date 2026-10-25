@@ -29,6 +29,7 @@ export const reports = pgTable('reports', {
   reporterEmail: text('reporter_email'),
 
   status: reportStatusEnum('status').default('SUBMITTED').notNull(),
+  accessToken: text('access_token'), // Cryptographic token for reporter ownership authorization
   adminNotes: text('admin_notes'),
 
   createdAt: timestamp('created_at').defaultNow().notNull(),

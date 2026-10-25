@@ -107,12 +107,12 @@ export async function triggerMatching(reportId: string) {
             status: 'PENDING'
           });
 
-          // Mark both reports as MATCHED if they were in SUBMITTED or UNDER_REVIEW
-          if (report.status === 'SUBMITTED' || report.status === 'UNDER_REVIEW') {
-            await db.update(reports).set({ status: 'MATCHED' }).where(eq(reports.id, report.id));
+          // Mark report as UNDER_REVIEW if it was in SUBMITTED
+          if (report.status === 'SUBMITTED') {
+            await db.update(reports).set({ status: 'UNDER_REVIEW' }).where(eq(reports.id, report.id));
           }
-          if (candidate.status === 'SUBMITTED' || candidate.status === 'UNDER_REVIEW') {
-            await db.update(reports).set({ status: 'MATCHED' }).where(eq(reports.id, candidate.id));
+          if (candidate.status === 'SUBMITTED') {
+            await db.update(reports).set({ status: 'UNDER_REVIEW' }).where(eq(reports.id, candidate.id));
           }
         }
       }

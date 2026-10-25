@@ -13,10 +13,11 @@ type Props = { params: Promise<{ id: string }> };
 
 async function getReport(id: string) {
   try {
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
     const [row] = await db
       .select()
       .from(reports)
-      .where(or(eq(reports.id, id), eq(reports.reportId, id)))
+      .where(isUuid ? or(eq(reports.id, id), eq(reports.reportId, id)) : eq(reports.reportId, id))
       .limit(1);
     return row || null;
   } catch {

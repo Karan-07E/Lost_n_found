@@ -285,22 +285,14 @@ export function HomeItemsView({ initialItems }: { initialItems: ReportItem[] }) 
                 <span className="font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
                   I Found This!
                 </span>{' '}
-                · Item in verification? Click{' '}
+                . Return it and {' '}
                 <span className="font-semibold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
-                  Verify / Collect
+                  Verify 
                 </span>{' '}
                 to confirm handover.
               </p>
             </div>
 
-            <div className="flex items-center gap-3">
-              <Link href="/report/lost">
-                <Button size="lg" className="gap-2 shadow-xs bg-primary hover:bg-primary/90 text-sm font-semibold">
-                  <PlusCircle className="h-4 w-4" />
-                  Report a Lost Item
-                </Button>
-              </Link>
-            </div>
           </div>
 
           {/* ─── CONTROLS TOOLBAR (SEARCH + TYPE + VIEWS MENU) ──────────── */}

@@ -98,6 +98,7 @@ export async function POST(request: NextRequest) {
     }
     const data = parsed.data;
     const reportId = await generateReportId();
+    const accessToken = 'sec_' + (await import('crypto')).randomBytes(24).toString('hex');
 
     const [row] = await db.insert(reports).values({
       reportId,
@@ -119,12 +120,13 @@ export async function POST(request: NextRequest) {
       reporterContact: data.reporterContact,
       reporterEmail: data.reporterEmail || null,
       status: 'SUBMITTED',
+      accessToken,
     }).returning();
 
     // Trigger heuristic matching in background
     triggerMatching(row.id).catch(console.error);
 
-    return Response.json({ data: { reportId: row.reportId, id: row.id } }, { status: 201 });
+    return Response.json({ data: { reportId: row.reportId, id: row.id, accessToken } }, { status: 201 });
   } catch (err) {
     console.error(err);
     return Response.json({ error: 'Failed to create report' }, { status: 500 });
