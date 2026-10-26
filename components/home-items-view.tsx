@@ -91,6 +91,11 @@ export function HomeItemsView({ initialItems }: { initialItems: ReportItem[] }) 
   const [submittingVerify, setSubmittingVerify] = useState(false);
   const [verifySuccessMessage, setVerifySuccessMessage] = useState<string | null>(null);
   const [verifyError, setVerifyError] = useState<string | null>(null);
+  // OTP sub-flow state (for "Item Collected" → OTP → RETURNED)
+  const [otpStep, setOtpStep] = useState<'idle' | 'sending' | 'enter' | 'verifying'>('idle');
+  const [otpCode, setOtpCode] = useState('');
+  const [otpMaskedEmail, setOtpMaskedEmail] = useState('');
+  const [otpError, setOtpError] = useState('');
 
   // Filter items
   const filteredItems = items.filter((item) => {
@@ -128,6 +133,68 @@ export function HomeItemsView({ initialItems }: { initialItems: ReportItem[] }) 
     setVerifyNotes('');
     setVerifySuccessMessage(null);
     setVerifyError(null);
+    setOtpStep('idle');
+    setOtpCode('');
+    setOtpMaskedEmail('');
+    setOtpError('');
+  };
+
+  // Step 1: Finder clicks "Item Collected" → send OTP to owner's email
+  const handleSendCollectionOtp = async () => {
+    if (!verifyModalItem) return;
+    if (!ownerName.trim() || !ownerContact.trim()) {
+      setOtpError('Please fill in your name and contact number first.');
+      return;
+    }
+    setOtpStep('sending');
+    setOtpError('');
+    try {
+      const res = await fetch(`/api/reports/${verifyModalItem.id}/request-collection-otp`, {
+        method: 'POST',
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to send OTP');
+      setOtpMaskedEmail(data.maskedEmail);
+      setOtpStep('enter');
+    } catch (err: any) {
+      setOtpError(err.message || 'Could not send OTP. Please try again.');
+      setOtpStep('idle');
+    }
+  };
+
+  // Step 2: Finder enters OTP (told by owner in person) → verify and mark RETURNED
+  const handleVerifyCollectionOtp = async () => {
+    if (!verifyModalItem || !otpCode.trim()) {
+      setOtpError('Please enter the verification code.');
+      return;
+    }
+    setOtpStep('verifying');
+    setOtpError('');
+    try {
+      const res = await fetch(`/api/reports/${verifyModalItem.id}/complete-collection-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: otpCode.trim(),
+          finderName: ownerName.trim(),
+          finderContact: ownerContact.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setOtpError(data.error || 'Verification failed. Please try again.');
+        setOtpStep('enter');
+        return;
+      }
+      // Mark item returned in local state
+      setItems((prev) =>
+        prev.map((i) => (i.id === verifyModalItem.id ? { ...i, status: 'RETURNED' } : i))
+      );
+      setVerifySuccessMessage(data.message);
+    } catch (err: any) {
+      setOtpError(err.message || 'Something went wrong. Please try again.');
+      setOtpStep('enter');
+    }
   };
 
   const handleSubmitFound = async (e: React.FormEvent) => {
@@ -177,9 +244,16 @@ export function HomeItemsView({ initialItems }: { initialItems: ReportItem[] }) 
     }
   };
 
+  // "Verify Ownership" (CLAIM) submit handler
   const handleSubmitVerify = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!verifyModalItem) return;
+
+    if (verifyAction === 'COLLECTED') {
+      // Handled separately via OTP flow buttons, not form submit
+      return;
+    }
+
     if (!ownerName.trim() || !ownerUsn.trim() || !ownerContact.trim()) {
       setVerifyError('Please enter your Name, Student USN/ID, and Contact number.');
       return;
@@ -196,7 +270,7 @@ export function HomeItemsView({ initialItems }: { initialItems: ReportItem[] }) 
           ownerName,
           ownerUsn,
           ownerContact,
-          action: verifyAction,
+          action: 'CLAIM',
           verificationNotes: verifyNotes,
         }),
       });
@@ -204,18 +278,10 @@ export function HomeItemsView({ initialItems }: { initialItems: ReportItem[] }) 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to submit verification');
 
-      const newStatus = verifyAction === 'COLLECTED' ? 'RETURNED' : 'VERIFICATION';
-
-      // Update local item status
       setItems((prev) =>
-        prev.map((i) => (i.id === verifyModalItem.id ? { ...i, status: newStatus } : i))
+        prev.map((i) => (i.id === verifyModalItem.id ? { ...i, status: 'VERIFICATION' } : i))
       );
-
-      setVerifySuccessMessage(
-        verifyAction === 'COLLECTED'
-          ? 'Great! The item is now marked as "Returned to Owner". This case is resolved.'
-          : 'Ownership verification submitted! Security / Admin has been notified.'
-      );
+      setVerifySuccessMessage('Ownership proof submitted! Admin will review and contact you.');
     } catch (err: any) {
       setVerifyError(err.message || 'Something went wrong. Please try again.');
     } finally {
@@ -897,8 +963,8 @@ export function HomeItemsView({ initialItems }: { initialItems: ReportItem[] }) 
                             : 'border-border bg-background text-muted-foreground hover:bg-muted'
                         }`}
                       >
-                        <span className="font-bold block text-emerald-700">✓ Item Collected</span>
-                        <span className="text-[10px] text-muted-foreground block mt-0.5">Mark report as Returned</span>
+                        <span className="font-bold block text-emerald-700">🔐 Start Secure Handover</span>
+                        <span className="text-[10px] text-muted-foreground block mt-0.5">Requires OTP verification → Track page</span>
                       </button>
                       <button
                         type="button"
@@ -958,60 +1024,98 @@ export function HomeItemsView({ initialItems }: { initialItems: ReportItem[] }) 
                     </div>
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-semibold text-foreground mb-1">
-                      {verifyAction === 'COLLECTED' ? 'Handover Note (Optional)' : 'Ownership Proof / Details *'}
-                    </label>
-                    <textarea
-                      rows={2}
-                      required={verifyAction === 'CLAIM'}
-                      value={verifyNotes}
-                      onChange={(e) => setVerifyNotes(e.target.value)}
-                      placeholder={
-                        verifyAction === 'COLLECTED'
-                          ? 'e.g. Collected from security desk Gate 2, ID verified'
-                          : 'e.g. Dell service tag ends in 49B2, blue Spider-man keychain'
-                      }
-                      className="w-full text-xs p-2.5 border border-border rounded-lg bg-background focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600 outline-none resize-none"
-                    />
-                  </div>
-
-                  <div className="pt-2 flex gap-3">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => setVerifyModalItem(null)}
-                      className="flex-1 text-xs"
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      type="submit"
-                      disabled={submittingVerify}
-                      className={`flex-1 text-white text-xs font-semibold gap-1.5 ${
-                        verifyAction === 'COLLECTED'
-                          ? 'bg-emerald-600 hover:bg-emerald-700'
-                          : 'bg-amber-600 hover:bg-amber-700'
-                      }`}
-                    >
-                      {submittingVerify ? (
+                  {/* OTP flow for "Item Collected" OR normal notes for CLAIM */}
+                  {verifyAction === 'COLLECTED' ? (
+                    <div className="space-y-3 pt-1">
+                      {/* OTP Step display */}
+                      {otpStep === 'idle' && (
                         <>
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          Submitting...
-                        </>
-                      ) : verifyAction === 'COLLECTED' ? (
-                        <>
-                          <Check className="h-4 w-4" />
-                          Confirm Item Collected
-                        </>
-                      ) : (
-                        <>
-                          <ShieldCheck className="h-4 w-4" />
-                          Submit Verification
+                          <p className="text-[11px] text-muted-foreground bg-emerald-50 border border-emerald-200 rounded-lg p-3 leading-relaxed">
+                            <strong className="text-emerald-800">How it works:</strong> Clicking below will send a 6-digit OTP to the owner's registered email. Ask the owner to check their inbox and tell you the code in person. Then enter it here to complete the handover.
+                          </p>
+                          {otpError && <p className="text-xs text-rose-600 font-medium">{otpError}</p>}
+                          <div className="pt-1 flex gap-3">
+                            <Button type="button" variant="outline" onClick={() => setVerifyModalItem(null)} className="flex-1 text-xs">Cancel</Button>
+                            <Button
+                              type="button"
+                              onClick={handleSendCollectionOtp}
+                              className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold gap-1.5"
+                            >
+                              <ShieldCheck className="h-4 w-4" /> Send OTP to Owner's Email
+                            </Button>
+                          </div>
                         </>
                       )}
-                    </Button>
-                  </div>
+
+                      {otpStep === 'sending' && (
+                        <div className="flex items-center justify-center gap-2 py-4 text-sm text-muted-foreground">
+                          <Loader2 className="h-4 w-4 animate-spin" /> Sending OTP to owner's email...
+                        </div>
+                      )}
+
+                      {otpStep === 'enter' && (
+                        <>
+                          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-900 leading-relaxed">
+                            ✅ OTP sent to <strong>{otpMaskedEmail}</strong>. Ask the owner to check their email and tell you the 6-digit code <strong>in person</strong>.
+                          </div>
+                          <div>
+                            <label className="block text-xs font-semibold text-foreground mb-1">Enter OTP Code (from owner) *</label>
+                            <input
+                              type="text"
+                              maxLength={6}
+                              value={otpCode}
+                              onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                              placeholder="e.g. 483921"
+                              className="w-full text-center text-xl font-mono font-bold tracking-widest p-3 border-2 border-emerald-300 rounded-lg bg-background focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-600 outline-none"
+                            />
+                          </div>
+                          {otpError && <p className="text-xs text-rose-600 font-medium">{otpError}</p>}
+                          <div className="flex gap-3">
+                            <Button type="button" variant="outline" onClick={() => { setOtpStep('idle'); setOtpCode(''); }} className="flex-1 text-xs">Resend OTP</Button>
+                            <Button
+                              type="button"
+                              onClick={handleVerifyCollectionOtp}
+                              className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold gap-1.5"
+                            >
+                              <CheckCircle2 className="h-4 w-4" /> Verify & Mark Returned
+                            </Button>
+                          </div>
+                        </>
+                      )}
+
+                      {otpStep === 'verifying' && (
+                        <div className="flex items-center justify-center gap-2 py-4 text-sm text-muted-foreground">
+                          <Loader2 className="h-4 w-4 animate-spin" /> Verifying OTP and closing case...
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <>
+                      <div>
+                        <label className="block text-xs font-semibold text-foreground mb-1">
+                          Ownership Proof / Details *
+                        </label>
+                        <textarea
+                          rows={2}
+                          required
+                          value={verifyNotes}
+                          onChange={(e) => setVerifyNotes(e.target.value)}
+                          placeholder="e.g. Dell service tag ends in 49B2, blue Spider-man keychain"
+                          className="w-full text-xs p-2.5 border border-border rounded-lg bg-background focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600 outline-none resize-none"
+                        />
+                      </div>
+                      <div className="pt-2 flex gap-3">
+                        <Button type="button" variant="outline" onClick={() => setVerifyModalItem(null)} className="flex-1 text-xs">Cancel</Button>
+                        <Button
+                          type="submit"
+                          disabled={submittingVerify}
+                          className="flex-1 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold gap-1.5"
+                        >
+                          {submittingVerify ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Submitting...</> : <><ShieldCheck className="h-4 w-4" /> Submit Verification</>}
+                        </Button>
+                      </div>
+                    </>
+                  )}
                 </form>
               )}
             </div>

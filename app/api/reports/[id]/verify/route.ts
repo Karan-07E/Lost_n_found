@@ -41,11 +41,14 @@ export async function POST(req: NextRequest, { params }: Params) {
       return Response.json({ error: 'Report not found' }, { status: 404 });
     }
 
-    const isCollected = data.action === 'COLLECTED';
-    const newStatus = isCollected ? 'RETURNED' : 'VERIFICATION';
-    const note = `[${isCollected ? 'ITEM RETURNED & COLLECTED' : 'OWNER VERIFICATION SUBMITTED'}] By owner: ${data.ownerName} (USN: ${data.ownerUsn}, Phone: ${data.ownerContact}). ${data.verificationNotes ? `Notes: ${data.verificationNotes}` : ''}`;
+    if (report.status === 'RETURNED' || report.status === 'CLOSED') {
+      return Response.json({ error: 'This report is already closed.' }, { status: 400 });
+    }
 
-    // Update report status
+    // CLAIM action: owner submits ownership proof, status stays at VERIFICATION for admin review
+    const newStatus = 'VERIFICATION';
+    const note = `[OWNER VERIFICATION SUBMITTED] By: ${data.ownerName} (USN: ${data.ownerUsn}, Phone: ${data.ownerContact}). ${data.verificationNotes ? `Notes: ${data.verificationNotes}` : ''}`;
+
     const [updatedReport] = await db
       .update(reports)
       .set({
@@ -56,7 +59,7 @@ export async function POST(req: NextRequest, { params }: Params) {
       .where(eq(reports.id, id))
       .returning();
 
-    // Log the claim/handover record
+    // Log a pending claim for admin review
     try {
       const claimId = await generateClaimId();
       await db.insert(claims).values({
@@ -66,10 +69,9 @@ export async function POST(req: NextRequest, { params }: Params) {
         claimantName: data.ownerName,
         claimantUsn: data.ownerUsn,
         claimantContact: data.ownerContact,
-        ownershipEvidence: data.verificationNotes || `Direct handover confirmation by ${data.ownerName}`,
-        status: isCollected ? 'APPROVED' : 'PENDING',
-        adminNotes: `Verified on ${new Date().toLocaleString()}`,
-        reviewedAt: new Date(),
+        ownershipEvidence: data.verificationNotes || `Ownership claim submitted by ${data.ownerName}`,
+        status: 'PENDING',
+        adminNotes: `Submitted via verify form on ${new Date().toLocaleString()}. Awaiting admin review.`,
       });
     } catch (e) {
       console.warn('Could not create claim log:', e);
@@ -77,9 +79,7 @@ export async function POST(req: NextRequest, { params }: Params) {
 
     return Response.json({
       success: true,
-      message: isCollected
-        ? 'Great! The item has been marked as Returned & Closed.'
-        : 'Ownership verification submitted successfully!',
+      message: 'Ownership proof submitted! Admin will review your claim.',
       data: updatedReport,
     });
   } catch (err) {
