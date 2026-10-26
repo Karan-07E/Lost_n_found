@@ -9,14 +9,10 @@ import {
   Search,
   Compass,
   HelpCircle,
-  PlusCircle,
   AlertCircle,
   Shield,
   Menu,
   X,
-  Phone,
-  CheckCircle2,
-  Lock,
 } from 'lucide-react';
 
 export function Navbar() {
@@ -134,7 +130,7 @@ export function Navbar() {
             </span>
           </div>
 
-          {/* Desktop Action Buttons (Report Lost & Report Found) */}
+          {/* Desktop Action Buttons (Report Lost) */}
           <div className="hidden md:flex items-center gap-2.5">
             <Link
               href="/report/lost"
@@ -143,15 +139,6 @@ export function Navbar() {
             >
               <AlertCircle className="h-4 w-4 text-rose-600" />
               <span>Report Lost</span>
-            </Link>
-
-            <Link
-              href="/report/found"
-              id="nav-report-found-btn"
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-700 border border-emerald-600 hover:border-emerald-700 transition-all shadow-2xs"
-            >
-              <PlusCircle className="h-4 w-4" />
-              <span>Report Found</span>
             </Link>
           </div>
 
@@ -162,12 +149,6 @@ export function Navbar() {
               className="px-2.5 py-1 text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200 rounded-md"
             >
               Lost?
-            </Link>
-            <Link
-              href="/report/found"
-              className="px-2.5 py-1 text-xs font-semibold bg-emerald-600 text-white rounded-md"
-            >
-              Found?
             </Link>
             <button
               type="button"
@@ -218,7 +199,7 @@ export function Navbar() {
               <div className="text-[11px] font-semibold text-neutral-400 uppercase tracking-wider px-3 mb-1.5">
                 Report an Item
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div>
                 <Link
                   href="/report/lost"
                   className="flex flex-col items-start gap-1 p-3 rounded-lg bg-rose-50 border border-rose-100 text-rose-900 hover:bg-rose-100/70 transition-colors"
@@ -228,17 +209,6 @@ export function Navbar() {
                     <span>Report Lost</span>
                   </div>
                   <span className="text-[11px] text-rose-600/80">Lost something on campus</span>
-                </Link>
-
-                <Link
-                  href="/report/found"
-                  className="flex flex-col items-start gap-1 p-3 rounded-lg bg-emerald-50 border border-emerald-100 text-emerald-900 hover:bg-emerald-100/70 transition-colors"
-                >
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-700">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                    <span>Report Found</span>
-                  </div>
-                  <span className="text-[11px] text-emerald-600/80">Turn in a found item</span>
                 </Link>
               </div>
             </div>
